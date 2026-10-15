@@ -1,0 +1,26 @@
+{
+  "name": "inboxzero",
+  "private": true,
+  "packageManager": "pnpm@12.10.1",
+  "version": "0.1.0",
+  "description": "Open-source temporary email service",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter \"@inboxzero/*\" run dev",
+    "build": "pnpm --filter \"@inboxzero/*\" run build",
+    "typecheck": "pnpm --filter \"@inboxzero/*\" run typecheck",
+    "lint": "pnpm --filter \"@inboxzero/*\" run lint",
+    "test": "pnpm --filter \"@inboxzero/*\" run test",
+    "db:generate": "pnpm --filter @inboxzero/api run db:generate",
+    "db:migrate": "pnpm --filter @inboxzero/api run db:migrate",
+    "db:seed": "pnpm --filter @inboxzero/api run db:seed",
+    "clean": "pnpm --filter \"@inboxzero/*\" run clean"
+  },
+  "devDependencies": {
+    "typescript": "5.5.4"
+  }
+}

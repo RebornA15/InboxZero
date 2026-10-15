@@ -1,0 +1,16 @@
+FROM node:24-bookworm-slim
+WORKDIR /app
+RUN npm install --global --allow-scripts=pnpm pnpm@12.10.1
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# Only application manifests are copied: local-db is a host-only helper.
+COPY packages/api/package.json ./packages/api/package.json
+COPY packages/web/package.json ./packages/web/package.json
+RUN --mount=type=cache,id=inboxzero-pnpm,target=/pnpm/store pnpm install --frozen-lockfile --store-dir=/pnpm/store --filter @inboxzero/api...
+COPY tsconfig.base.json ./
+COPY packages/api ./packages/api
+WORKDIR /app/packages/api
+USER node
+EXPOSE 3001
+# Compose supplies the environment; no host .env is loaded in the image.
+# Run the installed executable directly; pnpm 12 exec may try to reinstall as node.
+CMD ["sh", "-c", "./node_modules/.bin/tsx src/db/migrate.ts && exec ./node_modules/.bin/tsx watch src/index.ts"]

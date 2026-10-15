@@ -1,0 +1,16 @@
+FROM node:24-bookworm-slim
+WORKDIR /app
+RUN npm install --global --allow-scripts=pnpm pnpm@12.10.1
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# Only application manifests are copied: local-db is a host-only helper.
+COPY packages/api/package.json ./packages/api/package.json
+COPY packages/web/package.json ./packages/web/package.json
+RUN --mount=type=cache,id=inboxzero-pnpm,target=/pnpm/store pnpm install --frozen-lockfile --store-dir=/pnpm/store --filter @inboxzero/web...
+COPY packages/web ./packages/web
+# Vite writes its dependency cache beside the package.
+RUN chown -R node:node /app/packages/web
+WORKDIR /app/packages/web
+USER node
+EXPOSE 5173
+# Dependencies are installed and approved at build time, not at startup.
+CMD ["node", "node_modules/vite/bin/vite.js", "--host", "0.0.0.0", "--strictPort"]

@@ -1,0 +1,45 @@
+{
+  "name": "@inboxzero/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file=../../.env src/index.ts",
+    "build": "tsc --project tsconfig.json",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "lint": "eslint src --ext .ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "node --env-file=../../.env scripts/test-integration.mjs",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx --env-file=../../.env src/db/migrate.ts",
+    "db:seed": "tsx --env-file=../../.env src/db/seed.ts",
+    "db:studio": "drizzle-kit studio",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@fastify/cors": "9.0.1",
+    "@fastify/helmet": "11.1.1",
+    "@fastify/rate-limit": "9.1.0",
+    "dompurify": "3.1.6",
+    "drizzle-orm": "0.33.0",
+    "fastify": "4.28.1",
+    "jsdom": "25.0.1",
+    "mailparser": "3.7.1",
+    "nanoid": "5.0.7",
+    "pg": "8.12.0",
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "@types/dompurify": "3.0.5",
+    "@types/jsdom": "21.1.7",
+    "@types/mailparser": "3.4.4",
+    "@types/node": "22.5.5",
+    "@types/pg": "8.11.10",
+    "drizzle-kit": "0.24.2",
+    "rimraf": "6.0.1",
+    "tsx": "4.19.1",
+    "typescript": "5.5.4",
+    "vitest": "2.1.1"
+  }
+}

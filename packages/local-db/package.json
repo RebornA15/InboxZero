@@ -1,0 +1,13 @@
+{
+  "name": "@inboxzero/local-db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Optional host-only embedded PostgreSQL helper; not installed in Docker images",
+  "scripts": {
+    "start": "node start-embedded-pg.mjs"
+  },
+  "devDependencies": {
+    "embedded-postgres": "18.4.0-beta.17"
+  }
+}
