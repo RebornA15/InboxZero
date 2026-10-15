@@ -19,7 +19,7 @@ let purify: ReturnType<typeof DOMPurify> | null = null;
 function getPurify(): ReturnType<typeof DOMPurify> {
   if (!purify) {
     const { window } = new JSDOM("");
-    purify = DOMPurify(window as unknown as Window);
+    purify = DOMPurify(window as unknown as Parameters<typeof DOMPurify>[0]);
   }
   return purify;
 }

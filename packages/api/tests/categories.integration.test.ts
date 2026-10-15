@@ -128,11 +128,18 @@ describe.skipIf(!testUrl)("category API with isolated PostgreSQL", () => {
     expect(wrongInbox.statusCode).toBe(404);
   });
 
+  it("rejects ingestion secrets with trailing bytes", async () => {
+    const response = await app.inject({ method: "POST", url: "/api/ingest", headers: { "x-ingestion-secret": "b".repeat(64) + "extra" }, payload: {} });
+    expect(response.statusCode).toBe(401);
+  });
+
   it("preserves authenticated SSE new-message and deletion events", async () => {
     const session = await create({ category: "school" });
     const controller = new AbortController();
-    const response = await fetch(`${origin}/api/inboxes/${session.inbox.publicId}/events`, { headers: headers(session), signal: controller.signal });
+    const response = await fetch(`${origin}/api/inboxes/${session.inbox.publicId}/events`, { headers: { ...headers(session), origin: "http://localhost:5173" }, signal: controller.signal });
     expect(response.headers.get("content-type")).toContain("text/event-stream");
+    expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:5173");
+    expect(response.headers.get("cache-control")).toBe("no-store, no-transform");
     const reader = response.body!.getReader();
     const timeout = setTimeout(() => controller.abort(), 8000);
     try {

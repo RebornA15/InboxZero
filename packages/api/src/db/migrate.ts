@@ -1,19 +1,22 @@
+import pg from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { db, pool } from "./index.js";
-import { fileURLToPath } from "url";
-import { join, dirname } from "path";
+import { databaseConnection } from "./connection.js";
+import { fileURLToPath } from "node:url";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const migrationsFolder = join(__dirname, "migrations");
-
-async function runMigrations() {
-  console.log("Running database migrations…");
-  await migrate(db, { migrationsFolder });
-  console.log("Migrations complete.");
-  await pool.end();
-}
-
-runMigrations().catch((err) => {
-  console.error("Migration failed:", err);
-  process.exit(1);
-});
+const client = new pg.Client(databaseConnection());
+try {
+  await client.connect();
+  // A session lock on the SAME connection serializes concurrent deploy jobs.
+  await client.query("SELECT pg_advisory_lock(1876889199, 1)");
+  try {
+    await migrate(drizzle(client), { migrationsFolder: fileURLToPath(new URL("./migrations/", import.meta.url)) });
+    console.log("Database migrations complete.");
+  } finally {
+    await client.query("SELECT pg_advisory_unlock(1876889199, 1)");
+  }
+} catch {
+  // Database errors may include connection details or row data.
+  console.error("Database migration failed. Check database connectivity and migration compatibility.");
+  process.exitCode = 1;
+} finally { await client.end(); }

@@ -89,3 +89,7 @@ pnpm dev
 2. **Zero Storage of Raw Secrets**: The backend only stores PBKDF2 hashes of access secrets.
 3. **HTML Sanitization**: All incoming HTML messages are cleaned via DOMPurify before persistence and displayed in sandboxed iframes.
 4. **Auto-Expiring Ephemeral Storage**: Inboxes and messages are permanently purged once their TTL expires.
+
+## Public deployment
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for Vercel/Render configuration and the launch checklist, and [SECURITY_REVIEW.md](SECURITY_REVIEW.md) for outstanding public-launch blockers.

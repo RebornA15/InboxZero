@@ -7,7 +7,9 @@ import { inboxRoutes } from "./routes/inboxes.js";
 import { ingestionRoutes } from "./routes/ingest.js";
 import { healthRoutes } from "./routes/health.js";
 import { AppError } from "./lib/errors.js";
-import { startCleanupWorker } from "./lib/cleanup.js";
+import { pool } from "./db/index.js";
+import { sseManager } from "./lib/sse.js";
+import { startCleanupWorker, stopCleanupWorker } from "./lib/cleanup.js";
 import { pathToFileURL } from "node:url";
 
 function serializeError(error: Error) {
@@ -95,6 +97,12 @@ async function buildServer() {
     }),
   });
 
+  // Bearer secrets and email content must never be cached by browsers or CDNs.
+  fastify.addHook("onRequest", async (_request, reply) => {
+    reply.header("Cache-Control", "no-store");
+  });
+  fastify.addHook("preClose", async () => { sseManager.closeAll(); });
+
   // ---- Routes ----
   await fastify.register(inboxRoutes, { prefix: "/api/inboxes" });
   await fastify.register(healthRoutes, { prefix: "/api/health" });
@@ -120,8 +128,12 @@ async function buildServer() {
       });
     }
 
+    if (error.statusCode && error.statusCode >= 400 && error.statusCode < 500) {
+      return reply.code(error.statusCode).send({ error: error.statusCode === 429 ? "Rate limit exceeded" : "Request rejected" });
+    }
+
     // Never expose internal errors to clients
-    fastify.log.error({ err: serializeError(error) }, "Unhandled request error");
+    fastify.log.error({ err: config.NODE_ENV === "production" ? { name: error.name, code: error.code } : serializeError(error) }, "Unhandled request error");
     return reply.code(500).send({
       error: "An internal error occurred",
       code: "INTERNAL_ERROR",
@@ -135,7 +147,7 @@ async function main() {
   const server = await buildServer();
 
   try {
-    await server.listen({ port: config.PORT, host: config.HOST });
+    await server.listen({ port: config.PORT, host: config.NODE_ENV === "production" ? "0.0.0.0" : config.HOST });
     console.log(`InboxZero API listening on ${config.HOST}:${config.PORT}`);
 
     // Start background cleanup
@@ -148,7 +160,9 @@ async function main() {
   // Graceful shutdown
   const shutdown = async (signal: string) => {
     console.log(`Received ${signal}, shutting down…`);
+    stopCleanupWorker();
     await server.close();
+    await pool.end();
     process.exit(0);
   };
 

@@ -54,7 +54,7 @@ function EmailDocument({ message }: { message: MessageDetail }) {
     return () => { disposed = true; observer?.disconnect(); containerObserver.disconnect(); element.removeEventListener("load", loaded); };
   }, [message.htmlBody]);
   return <div ref={container} style={{ height: height * layout.scale, overflow: "hidden" }}><iframe ref={frame} title="Email content" className="email-iframe"
-    style={{ height, width: layout.width || "100%", transform: `scale(${layout.scale})`, transformOrigin: "top left" }} sandbox="allow-same-origin allow-popups" srcDoc={message.htmlBody!} /></div>;
+    style={{ height, width: layout.width || "100%", transform: `scale(${layout.scale})`, transformOrigin: "top left" }} sandbox="allow-same-origin allow-popups" srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; form-action 'none'; base-uri 'none'">${message.htmlBody!}`} /></div>;
 }
 
 export function MessageReader({ message, selected, loading, error, deleting, recipient, onClose, onRetry, onDelete, onCopy }: {

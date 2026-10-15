@@ -43,14 +43,14 @@ const ingestMessageBody = z.object({
 
 export const ingestionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post("/", async (request, reply) => {
+    if (!config.INGESTION_ENABLED) throw Errors.notFound("Ingestion endpoint");
     // Verify internal secret — constant-time string comparison
     const provided = (request.headers["x-ingestion-secret"] as string) ?? "";
     const expected = config.INGESTION_API_SECRET;
 
     // Note: We use timingSafeEqual to prevent timing attacks
     const { timingSafeEqual } = await import("crypto");
-    const providedBuf = Buffer.alloc(expected.length, 0);
-    Buffer.from(provided).copy(providedBuf);
+    const providedBuf = Buffer.from(provided);
     const expectedBuf = Buffer.from(expected);
 
     if (

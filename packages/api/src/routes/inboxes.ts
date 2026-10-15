@@ -263,35 +263,32 @@ export const inboxRoutes: FastifyPluginAsync = async (fastify) => {
       const { id } = request.params;
       const auth = await authorizeInbox(request, id);
 
+      if (sseManager.subscriberCount(auth.publicId) >= 5) {
+        return reply.code(429).send({ error: "Too many inbox streams" });
+      }
+      // Hijacked responses bypass Fastify's send path. Copy CORS/security headers
+      // explicitly so cross-origin fetch streaming works on the deployed frontend.
+      reply.hijack();
+      for (const [name, value] of Object.entries(reply.getHeaders())) {
+        if (value !== undefined) reply.raw.setHeader(name, value);
+      }
       reply.raw.setHeader("Content-Type", "text/event-stream");
-      reply.raw.setHeader("Cache-Control", "no-cache");
+      reply.raw.setHeader("Cache-Control", "no-store, no-transform");
       reply.raw.setHeader("Connection", "keep-alive");
       reply.raw.setHeader("X-Accel-Buffering", "no");
       reply.raw.flushHeaders();
-
       sseManager.subscribe(auth.publicId, reply);
-
-      // Send an initial ping to confirm connection
       reply.raw.write(": ping\n\n");
-
-      // Keepalive every 30 seconds
       const keepalive = setInterval(() => {
-        try {
-          reply.raw.write(": ping\n\n");
-        } catch {
-          clearInterval(keepalive);
-        }
+        if (!reply.raw.destroyed) reply.raw.write(": ping\n\n");
       }, 30_000);
-
-      request.raw.on("close", () => {
+      const expiry = setTimeout(() => reply.raw.end(), Math.max(0, auth.expiresAt.getTime() - Date.now()));
+      reply.raw.on("close", () => {
         clearInterval(keepalive);
+        clearTimeout(expiry);
         sseManager.unsubscribe(auth.publicId, reply);
       });
-
-      // Return a pending promise to keep the connection open
-      await new Promise<void>((resolve) => {
-        request.raw.on("close", resolve);
-      });
+      return reply;
     }
   );
 };

@@ -1,0 +1,57 @@
+# Review paid plans, region, and domains before creating resources. No auto deploys.
+services:
+  - type: web
+    name: inboxzero-api
+    runtime: node
+    plan: 0.5c-512mb
+    region: frankfurt
+    numInstances: 1
+    autoDeployTrigger: "off"
+    buildCommand: npx --yes pnpm@12.10.1 install --frozen-lockfile --prod=false --filter @inboxzero/api... && npx --yes pnpm@12.10.1 --filter @inboxzero/api build
+    preDeployCommand: node packages/api/dist/db/migrate.js
+    startCommand: node packages/api/dist/index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: TRUST_PROXY
+        value: "1"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: inboxzero-db
+          property: connectionString
+      - key: PGSSLMODE
+        value: require
+      - key: ACCESS_TOKEN_SECRET
+        generateValue: true
+      - key: INGESTION_API_SECRET
+        generateValue: true
+      - key: INGESTION_ENABLED
+        value: "false"
+      - key: CORS_ORIGIN
+        sync: false
+      - key: OWNED_MAIL_DOMAINS
+        sync: false
+      - key: WORK_EMAIL_DOMAIN
+        sync: false
+      - key: SCHOOL_EMAIL_DOMAIN
+        sync: false
+      - key: PERSONAL_EMAIL_DOMAIN
+        sync: false
+      - key: MAIL_DOMAINS
+        value: ""
+      - key: CUSTOM_USERNAMES_ENABLED
+        value: "true"
+databases:
+  - name: inboxzero-db
+    plan: 0.1c-256mb
+    region: frankfurt
+    postgresMajorVersion: "16"
+    databaseName: inboxzero
+    user: inboxzero
+    diskSizeGB: 1
+    ipAllowList: []

@@ -7,8 +7,8 @@ export const healthRoutes: FastifyPluginAsync = async (fastify) => {
 
     try {
       const client = await pool.connect();
-      await client.query("SELECT 1");
-      client.release();
+      try { await client.query("SELECT 1"); }
+      finally { client.release(); }
       dbOk = true;
     } catch {
       // DB connection failed — do not reveal details

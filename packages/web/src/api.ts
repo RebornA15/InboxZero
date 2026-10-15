@@ -1,6 +1,8 @@
 import type { AddressOptions, CreateInboxOptions, Inbox, MessageDetail, MessageListItem, SSEEvent, StoredInboxSession } from "./types";
 
-const API_BASE = "/api";
+// The value includes /api (for example https://inboxzero-api.onrender.com/api).
+// Empty values preserve Vite's same-origin development proxy.
+const API_BASE = (import.meta.env.VITE_API_BASE_URL?.trim() || "/api").replace(/\/+$/, "");
 
 export async function getAddressOptions(signal?: AbortSignal): Promise<AddressOptions> {
   const response = await fetch(`${API_BASE}/inboxes/options`, { signal });
@@ -105,6 +107,9 @@ export function connectInboxEvents(
   onStatusChange: (connected: boolean) => void
 ): () => void {
   const abortController = new AbortController();
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  let retryDelay = 1000;
+  let terminal = false;
 
   async function startStream() {
     try {
@@ -117,10 +122,11 @@ export function connectInboxEvents(
       });
 
       if (!response.ok || !response.body) {
-        onStatusChange(false);
+        terminal = [401, 404, 410].includes(response.status);
         return;
       }
 
+      retryDelay = 1000;
       onStatusChange(true);
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -163,12 +169,17 @@ export function connectInboxEvents(
       }
     } finally {
       onStatusChange(false);
+      if (!abortController.signal.aborted && !terminal) {
+        retryTimer = setTimeout(startStream, retryDelay);
+        retryDelay = Math.min(retryDelay * 2, 30000);
+      }
     }
   }
 
-  startStream();
+  void startStream();
 
   return () => {
+    clearTimeout(retryTimer);
     abortController.abort();
   };
 }

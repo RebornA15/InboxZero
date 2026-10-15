@@ -50,6 +50,13 @@ class SSEManager {
     }
   }
 
+  closeAll(): void {
+    for (const replies of this.subscribers.values()) {
+      for (const reply of replies) reply.raw.end();
+    }
+    this.subscribers.clear();
+  }
+
   subscriberCount(inboxId: string): number {
     return this.subscribers.get(inboxId)?.size ?? 0;
   }

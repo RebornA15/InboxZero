@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { resolveDomainConfiguration } from "./lib/address-policy.js";
 
-const configSchema = z.object({
+export const configSchema = z.object({
   // Server
   PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   HOST: z.string().default("0.0.0.0"),
@@ -15,6 +15,7 @@ const configSchema = z.object({
   // Secrets
   ACCESS_TOKEN_SECRET: z.string().min(32),
   INGESTION_API_SECRET: z.string().min(32),
+  INGESTION_ENABLED: z.enum(["true", "false"]).optional(),
 
   // Email
   MAIL_DOMAINS: z.string().default(""),
@@ -43,7 +44,8 @@ const configSchema = z.object({
   RATE_LIMIT_API_PER_MINUTE: z.coerce.number().int().min(1).default(60),
   TRUST_PROXY: z
     .string()
-    .transform((s) => s === "true")
+    .refine(s => /^(true|false|[1-9][0-9]*)$/.test(s), "Use true, false, or a trusted proxy hop count")
+    .transform(s => s === "true" ? true : s === "false" ? false : Number(s))
     .default("false"),
 
   // CORS
@@ -59,11 +61,20 @@ const configSchema = z.object({
     .min(10_000)
     .default(60_000),
 }).superRefine((values, context) => {
+  if (values.NODE_ENV === "production") {
+    for (const origin of values.CORS_ORIGIN) {
+      try {
+        const url = new URL(origin);
+        if (url.protocol !== "https:" || url.origin !== origin || url.username || url.password || url.hostname.includes("*")) throw new Error();
+      } catch { context.addIssue({ code: z.ZodIssueCode.custom, path: ["CORS_ORIGIN"], message: "Production CORS origins must be exact HTTPS origins without paths or wildcards" }); }
+    }
+    if (!values.CORS_ORIGIN.length) context.addIssue({ code: z.ZodIssueCode.custom, path: ["CORS_ORIGIN"], message: "At least one frontend origin is required" });
+  }
   try { resolveDomainConfiguration(values); }
   catch (error) { context.addIssue({ code: z.ZodIssueCode.custom, message: (error as Error).message }); }
 }).transform(values => {
   const domains = resolveDomainConfiguration(values);
-  return { ...values, MAIL_DOMAINS: domains.allowedDomains, DOMAIN_CONFIG: domains };
+  return { ...values, INGESTION_ENABLED: values.INGESTION_ENABLED === "true" || (values.INGESTION_ENABLED === undefined && values.NODE_ENV !== "production"), MAIL_DOMAINS: domains.allowedDomains, DOMAIN_CONFIG: domains };
 });
 
 export type Config = z.infer<typeof configSchema>;

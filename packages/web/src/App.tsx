@@ -269,7 +269,10 @@ export function App() {
           showToast("This inbox has expired", "info");
         }
       },
-      () => { /* Connection status has no visual indicator; streaming stays active. */ }
+      connected => {
+        // Reconcile messages after a deploy/reconnection; SSE has no replay log.
+        if (connected) getMessages(session.inbox.publicId, session.accessSecret).then(setMessages).catch(console.error);
+      }
     );
 
     return cleanupSSE;
@@ -461,6 +464,7 @@ export function App() {
                   : "No active address"}
           </div>
 
+          {session?.inbox.address.endsWith(".test") && <p className="dialog-description" role="note">Test address only. Cannot receive public Internet email.</p>}
           <div
             className={`expiry-line ${
               timeLeft === "Expired" ? "expired" : isWarningExpiry ? "warning" : ""

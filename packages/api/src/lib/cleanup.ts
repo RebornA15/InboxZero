@@ -22,6 +22,7 @@ function serializeCleanupError(err: unknown) {
     routine?: string;
   };
 
+  if (config.NODE_ENV === "production") return { name: pgError.name, code: pgError.code };
   return {
     message: pgError.message,
     code: pgError.code,
