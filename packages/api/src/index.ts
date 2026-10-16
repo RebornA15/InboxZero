@@ -2,7 +2,8 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
-import { config } from "./config.js";
+import { config, getConfig } from "./config.js";
+import { runMigrations } from "./db/migrate.js";
 import { inboxRoutes } from "./routes/inboxes.js";
 import { ingestionRoutes } from "./routes/ingest.js";
 import { healthRoutes } from "./routes/health.js";
@@ -144,6 +145,15 @@ async function buildServer() {
 }
 
 async function main() {
+  // Enforce the gate even if a dashboard runs dist/index.js directly.
+  getConfig();
+  try { await runMigrations(); }
+  catch {
+    console.error("API startup blocked: tracked database migrations/readiness did not succeed.");
+    await pool.end();
+    process.exitCode = 1;
+    return;
+  }
   const server = await buildServer();
 
   try {
