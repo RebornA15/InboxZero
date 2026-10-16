@@ -9,12 +9,17 @@ export interface CreateInboxOptions {
 }
 
 export interface AddressOptions {
+  demoMode?: boolean;
+  simulationEnabled?: boolean;
+  emailGenerationEnabled?: boolean;
+  deliveryNotice?: string | null;
   categories: { category: InboxCategory; label: string; domain: string }[];
   customUsernamesEnabled: boolean;
   development: boolean;
 }
 
 export interface Inbox {
+  demoOnly?: boolean;
   publicId: string;
   address: string;
   category: InboxCategory;

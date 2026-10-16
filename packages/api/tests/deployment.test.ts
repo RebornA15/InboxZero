@@ -4,7 +4,7 @@ import { databaseConnection } from "../src/db/connection.js";
 import { configSchema } from "../src/config.js";
 
 const production = {
-  NODE_ENV: "production", DATABASE_URL: "postgresql://user:password@localhost/inboxzero",
+  NODE_ENV: "production", DEMO_MODE: "false", DATABASE_URL: "postgresql://user:password@localhost/inboxzero",
   ACCESS_TOKEN_SECRET: "a".repeat(64), INGESTION_API_SECRET: "b".repeat(64),
   OWNED_MAIL_DOMAINS: "owned-fixture.com", WORK_EMAIL_DOMAIN: "work.owned-fixture.com",
   SCHOOL_EMAIL_DOMAIN: "school.owned-fixture.com", PERSONAL_EMAIL_DOMAIN: "owned-fixture.com",
@@ -12,6 +12,25 @@ const production = {
 };
 
 describe("production configuration", () => {
+  const limited = { ...production, EMAIL_GENERATION_ENABLED: "false", OWNED_MAIL_DOMAINS: "", WORK_EMAIL_DOMAIN: "", SCHOOL_EMAIL_DOMAIN: "", PERSONAL_EMAIL_DOMAIN: "" };
+  it("allows explicit limited production mode without domains, retaining all other security checks", () => {
+    const config = configSchema.parse(limited);
+    expect(config.DOMAIN_CONFIG.domains).toEqual({});
+    expect(config.MAIL_DOMAINS).toEqual([]);
+    expect(config.INGESTION_ENABLED).toBe(false);
+    expect(configSchema.safeParse({ ...limited, INGESTION_ENABLED: "true" }).success).toBe(false);
+    expect(configSchema.safeParse({ ...limited, EMAIL_GENERATION_ENABLED: "true" }).success).toBe(false);
+    expect(configSchema.safeParse({ ...limited, EMAIL_GENERATION_ENABLED: "yes" }).success).toBe(false);
+    expect(configSchema.parse({ ...production, EMAIL_GENERATION_ENABLED: "true" }).DOMAIN_CONFIG.generationEnabled).toBe(true);
+    for (const key of ["DATABASE_URL", "ACCESS_TOKEN_SECRET", "INGESTION_API_SECRET", "CORS_ORIGIN"]) {
+      expect(configSchema.safeParse({ ...limited, [key]: "" }).success).toBe(false);
+    }
+    for (const key of ["OWNED_MAIL_DOMAINS", "WORK_EMAIL_DOMAIN", "SCHOOL_EMAIL_DOMAIN", "PERSONAL_EMAIL_DOMAIN", "MAIL_DOMAINS"]) {
+      for (const domain of ["inboxzero.test", "example.com", "uncontrolled-fixture.com"]) {
+        expect(configSchema.safeParse({ ...limited, [key]: domain }).success).toBe(false);
+      }
+    }
+  });
   it("requires exact HTTPS origins and rejects test domains", () => {
     expect(configSchema.safeParse(production).success).toBe(true);
     for (const origin of ["*", "https://*.vercel.app", "http://localhost:5173", "https://inboxzero.vercel.app/path", ""]) {

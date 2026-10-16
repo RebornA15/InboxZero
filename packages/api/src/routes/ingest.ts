@@ -43,7 +43,7 @@ const ingestMessageBody = z.object({
 
 export const ingestionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post("/", async (request, reply) => {
-    if (!config.INGESTION_ENABLED) throw Errors.notFound("Ingestion endpoint");
+    if (config.DEMO_MODE || !config.INGESTION_ENABLED) throw Errors.notFound("Ingestion endpoint");
     // Verify internal secret — constant-time string comparison
     const provided = (request.headers["x-ingestion-secret"] as string) ?? "";
     const expected = config.INGESTION_API_SECRET;

@@ -13,14 +13,18 @@ import { allocateAddress, createInboxSchema, inboxCategories, categoryLabels } f
 
 const simulateMessageBody = z.object({
   subject: z.string().max(998).optional(),
-});
+}).strict();
 
 export const inboxRoutes: FastifyPluginAsync = async (fastify) => {
   // -------------------------------------------------------------------------
   // POST /api/inboxes — Create a new inbox
   // -------------------------------------------------------------------------
   fastify.get("/options", async () => ({
-    categories: inboxCategories.map(category => ({ category, label: categoryLabels[category], domain: config.DOMAIN_CONFIG.domains[category] })),
+    categories: config.DOMAIN_CONFIG.generationEnabled ? inboxCategories.map(category => ({ category, label: categoryLabels[category], domain: config.DOMAIN_CONFIG.domains[category] })) : [],
+    emailGenerationEnabled: config.DOMAIN_CONFIG.generationEnabled,
+    demoMode: config.DEMO_MODE,
+    simulationEnabled: config.DOMAIN_CONFIG.generationEnabled && (config.DEMO_MODE || config.NODE_ENV !== "production"),
+    deliveryNotice: config.DEMO_MODE ? "DEMO ONLY — these reserved .test addresses cannot send or receive real email." : null,
     customUsernamesEnabled: config.DOMAIN_CONFIG.customUsernamesEnabled,
     development: config.DOMAIN_CONFIG.development,
   }));
@@ -28,6 +32,7 @@ export const inboxRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post("/", {
     config: { rateLimit: { max: config.RATE_LIMIT_INBOX_CREATE_PER_HOUR, timeWindow: "1 hour" } },
   }, async (request, reply) => {
+    if (!config.DOMAIN_CONFIG.generationEnabled) throw Errors.emailGenerationDisabled();
     const parsed = createInboxSchema.safeParse(request.body === undefined ? {} : request.body);
     if (!parsed.success) throw Errors.badRequest(parsed.error.issues[0]?.message ?? "Invalid address request");
     const rawSecret = randomToken(48);
@@ -44,7 +49,7 @@ export const inboxRoutes: FastifyPluginAsync = async (fastify) => {
       return created;
     });
     // Only creation returns the raw secret; neither options nor metadata expose it.
-    return reply.code(201).send({ accessSecret: rawSecret, inbox });
+    return reply.code(201).send({ accessSecret: rawSecret, inbox: { ...inbox, demoOnly: config.DEMO_MODE } });
   });
 
   // -------------------------------------------------------------------------
@@ -71,7 +76,7 @@ export const inboxRoutes: FastifyPluginAsync = async (fastify) => {
 
     if (!inbox) throw Errors.notFound("Inbox");
 
-    return reply.send({ inbox });
+    return reply.send({ inbox: { ...inbox, demoOnly: inbox.address.endsWith(".test") } });
   });
 
   // -------------------------------------------------------------------------
@@ -176,7 +181,7 @@ export const inboxRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request, reply) => {
-      if (config.NODE_ENV === "production") {
+      if (!config.DOMAIN_CONFIG.generationEnabled || (config.NODE_ENV === "production" && !config.DEMO_MODE)) {
         throw Errors.notFound("Simulation endpoint");
       }
 
@@ -203,21 +208,24 @@ export const inboxRoutes: FastifyPluginAsync = async (fastify) => {
 
       if (!inbox) throw Errors.notFound("Inbox");
 
-      const subject = body.data.subject ?? "Your verification code is 492019";
+      // A demo deployment must never write simulated mail to a stored real-domain inbox.
+      if (config.DEMO_MODE && !config.MAIL_DOMAINS.includes(inbox.address.split("@")[1] ?? "")) throw Errors.forbidden();
+
+      const subject = config.DEMO_MODE ? "[DEMO] Sample verification code: 492019" : body.data.subject ?? "Your verification code is 492019";
       const textBody = [
         "Hello!",
         "",
-        `This is a sample test email sent to your disposable inbox: ${inbox.address}.`,
+        `DEMO ONLY: This is a simulated message for ${inbox.address}. No external email was received.`,
         "",
         `Address style: ${categoryLabels[inbox.category]}`,
-        "Your security code: 492019",
+        "Sample code (not a real credential): 492019",
         "This code will expire in 10 minutes.",
         "",
-        "Thank you for choosing InboxZero!",
+        "Reserved .test addresses cannot send or receive real email.",
       ].join("\n");
       const htmlBody = `<!DOCTYPE html><html><body style="font-family:sans-serif;color:#1e293b;line-height:1.6;padding:20px;">
-        <h2 style="color:#4f46e5;margin-bottom:12px;">Security Verification</h2>
-        <p>This is a test simulated message delivered by the InboxZero development API.</p>
+        <h2 style="color:#4f46e5;margin-bottom:12px;">DEMO ONLY — Simulated message</h2>
+        <p>No external email was received. Reserved .test addresses cannot send or receive real email.</p>
         <div style="background:#f1f5f9;border-radius:8px;padding:16px;text-align:center;margin:20px 0;">
           <span style="font-size:24px;font-weight:bold;letter-spacing:4px;color:#0f172a;">492019</span>
         </div>
@@ -228,7 +236,7 @@ export const inboxRoutes: FastifyPluginAsync = async (fastify) => {
       try {
         message = await persistMessageForInbox(inbox, {
           from: "security@simulation.inboxzero.test",
-          fromName: "security",
+          fromName: "InboxZero Demo (simulated)",
           subject,
           textBody,
           htmlBody,

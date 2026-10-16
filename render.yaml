@@ -1,15 +1,15 @@
-# Review paid plans, region, and domains before creating resources. No auto deploys.
+# Free portfolio demo. Review free-tier expiry/quotas before creating resources. No auto deploys.
 services:
   - type: web
     name: inboxzero-api
     runtime: node
-    plan: 0.5c-512mb
+    plan: free
     region: frankfurt
     numInstances: 1
     autoDeployTrigger: "off"
     buildCommand: npx --yes pnpm@12.10.1 install --frozen-lockfile --prod=false --workspace-packages=packages/api --filter @inboxzero/api... && npx --yes pnpm@12.10.1 --workspace-packages=packages/api --filter @inboxzero/api build
-    preDeployCommand: node packages/api/dist/db/migrate.js
-    startCommand: node packages/api/dist/index.js
+    # Free services have no pre-deploy step; migrations must succeed before listening.
+    startCommand: node packages/api/dist/db/migrate.js && node packages/api/dist/index.js
     healthCheckPath: /api/health
     envVars:
       - key: NODE_VERSION
@@ -32,26 +32,30 @@ services:
         generateValue: true
       - key: INGESTION_ENABLED
         value: "false"
+      - key: DEMO_MODE
+        value: "true"
+      # Demo uses fixed reserved domains and never enables external ingestion.
+      - key: EMAIL_GENERATION_ENABLED
+        value: "true"
       - key: CORS_ORIGIN
         sync: false
       - key: OWNED_MAIL_DOMAINS
-        sync: false
+        value: ""
       - key: WORK_EMAIL_DOMAIN
-        sync: false
+        value: ""
       - key: SCHOOL_EMAIL_DOMAIN
-        sync: false
+        value: ""
       - key: PERSONAL_EMAIL_DOMAIN
-        sync: false
+        value: ""
       - key: MAIL_DOMAINS
         value: ""
       - key: CUSTOM_USERNAMES_ENABLED
         value: "true"
 databases:
   - name: inboxzero-db
-    plan: 0.1c-256mb
+    plan: free
     region: frankfurt
     postgresMajorVersion: "16"
     databaseName: inboxzero
     user: inboxzero
-    diskSizeGB: 1
     ipAllowList: []

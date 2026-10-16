@@ -88,15 +88,10 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
 export function App() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [simulationEnabled, setSimulationEnabled] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
   const drawerRef = useRef<HTMLElement>(null);
   const menuRef = useRef<HTMLButtonElement>(null);
   const workspaceRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    getAddressOptions(controller.signal).then(options => setSimulationEnabled(options.development)).catch(() => {});
-    return () => controller.abort();
-  }, []);
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -149,6 +144,16 @@ export function App() {
   const [isSimulating, setIsSimulating] = useState<boolean>(false);
   const [addressDialogOpen, setAddressDialogOpen] = useState(false);
 
+  // Retry capabilities after inbox creation/restoration if a free backend was waking up.
+  useEffect(() => {
+    const controller = new AbortController();
+    getAddressOptions(controller.signal).then(options => {
+      setSimulationEnabled(options.simulationEnabled ?? options.development);
+      setDemoMode(options.demoMode === true);
+    }).catch(() => {});
+    return () => controller.abort();
+  }, [session?.inbox.publicId]);
+
   const showToast = (text: string, type: "success" | "info" = "info") => {
     setToastMessage({ id: Date.now(), text, type });
     setTimeout(() => {
@@ -194,7 +199,7 @@ export function App() {
       setIsWarningExpiry(false);
       setCopied(false);
       setAddressDialogOpen(false);
-      showToast(`${categoryLabels[newSession.inbox.category]} address created`, "success");
+      showToast(`${categoryLabels[newSession.inbox.category]} ${newSession.inbox.demoOnly ? "demo-only " : ""}address created`, "success");
     } catch (err: unknown) {
       console.error("Failed to initialize inbox:", err);
       const message = (err as Error).message || "Could not generate inbox";
@@ -313,7 +318,7 @@ export function App() {
       return;
     }
     setCopied(true);
-    showToast("Email address copied to clipboard", "success");
+    showToast(session.inbox.address.endsWith(".test") ? "Demo-only address copied. Cannot receive real email." : "Email address copied to clipboard", "success");
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -367,9 +372,9 @@ export function App() {
     );
 
     if (success) {
-      showToast("Simulated email dispatched!", "success");
+      showToast("Sample message added to your inbox. No real email was sent.", "success");
     } else {
-      showToast("Ingestion simulation failed (Check secret or backend connection)", "info");
+      showToast("Could not add a sample message. Your inbox may have expired or reached its limit.", "info");
     }
     setIsSimulating(false);
   };
@@ -432,7 +437,7 @@ export function App() {
 
         <section className="session-panel" aria-label="Active temporary inbox">
           <div className="session-heading">
-            <span>Active address</span>
+            <span>{demoMode || session?.inbox.address.endsWith(".test") ? "Demo-only address" : "Active address"}</span>
             <button
               id="copy-address-btn"
               onClick={handleCopy}
@@ -464,7 +469,7 @@ export function App() {
                   : "No active address"}
           </div>
 
-          {session?.inbox.address.endsWith(".test") && <p className="dialog-description" role="note">Test address only. Cannot receive public Internet email.</p>}
+          {session?.inbox.address.endsWith(".test") && <p className="dialog-description" role="note"><strong>DEMO ONLY.</strong> Cannot send or receive real email. Do not use for signups or verification.</p>}
           <div
             className={`expiry-line ${
               timeLeft === "Expired" ? "expired" : isWarningExpiry ? "warning" : ""
@@ -489,10 +494,10 @@ export function App() {
 
         <div className="sidebar-spacer" />
 
-        {simulationEnabled && <section className="simulation-panel" aria-label="Development tools">
+        {simulationEnabled && <section className="simulation-panel" aria-label="Simulated messages">
           <div className="simulation-note">
             <ShieldCheck size={16} />
-            <span>Development simulation</span>
+            <span>{demoMode ? "Demo messages only" : "Development simulation"}</span>
           </div>
           <button
             id="simulate-mail-btn"
@@ -501,12 +506,13 @@ export function App() {
             className="btn btn-secondary simulate-btn"
           >
             <PaperPlaneTilt size={16} />
-            <span>{isSimulating ? "Sending..." : "Simulate Incoming Mail"}</span>
+            <span>{isSimulating ? "Adding sample..." : "Add sample message"}</span>
           </button>
         </section>}
       </aside>
 
       <main ref={workspaceRef} className={`mail-workspace ${selectedMessageId !== null ? "reader-open" : ""}`}>
+        {(demoMode || session?.inbox.address.endsWith(".test")) && <p className="demo-banner" role="note"><strong>Portfolio demo — no real email.</strong> All .test addresses are non-deliverable. Generate a demo inbox, then add a sample message to try it.</p>}
         <div className="mobile-topbar">
           <button ref={menuRef} type="button" className="btn btn-icon" aria-label="Open navigation" aria-expanded={drawerOpen}
             aria-controls="mobile-navigation" onClick={() => setDrawerOpen(true)}><List size={23} /></button>

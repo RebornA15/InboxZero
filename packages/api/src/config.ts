@@ -18,6 +18,8 @@ export const configSchema = z.object({
   INGESTION_ENABLED: z.enum(["true", "false"]).optional(),
 
   // Email
+  DEMO_MODE: z.enum(["true", "false"]).default("false"),
+  EMAIL_GENERATION_ENABLED: z.enum(["true", "false"]).default("true"),
   MAIL_DOMAINS: z.string().default(""),
   OWNED_MAIL_DOMAINS: z.string().optional(),
   WORK_EMAIL_DOMAIN: z.string().optional(),
@@ -74,7 +76,7 @@ export const configSchema = z.object({
   catch (error) { context.addIssue({ code: z.ZodIssueCode.custom, message: (error as Error).message }); }
 }).transform(values => {
   const domains = resolveDomainConfiguration(values);
-  return { ...values, INGESTION_ENABLED: values.INGESTION_ENABLED === "true" || (values.INGESTION_ENABLED === undefined && values.NODE_ENV !== "production"), MAIL_DOMAINS: domains.allowedDomains, DOMAIN_CONFIG: domains };
+  return { ...values, DEMO_MODE: domains.demoMode, INGESTION_ENABLED: !domains.demoMode && domains.generationEnabled && (values.INGESTION_ENABLED === "true" || (values.INGESTION_ENABLED === undefined && values.NODE_ENV !== "production")), MAIL_DOMAINS: domains.allowedDomains, DOMAIN_CONFIG: domains };
 });
 
 export type Config = z.infer<typeof configSchema>;

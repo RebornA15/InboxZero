@@ -4,6 +4,9 @@ import { Errors } from "./errors.js";
 
 export const inboxCategories = ["work", "school", "personal"] as const;
 export type InboxCategory = (typeof inboxCategories)[number];
+export const demoDomains: Record<InboxCategory, string> = {
+  work: "work.inboxzero.test", school: "school.inboxzero.test", personal: "inboxzero.test",
+};
 export const categoryLabels: Record<InboxCategory, string> = {
   work: "Work Email", school: "School Email", personal: "Personal Email",
 };
@@ -29,7 +32,9 @@ export const createInboxSchema = z.object({
 }).strict();
 
 export interface DomainConfiguration {
-  domains: Record<InboxCategory, string>;
+  domains: Partial<Record<InboxCategory, string>>;
+  generationEnabled: boolean;
+  demoMode: boolean;
   allowedDomains: string[];
   legacyDomains: string[];
   customUsernamesEnabled: boolean;
@@ -52,6 +57,28 @@ function isReservedDomain(domain: string): boolean {
 export function resolveDomainConfiguration(env: Record<string, unknown>): DomainConfiguration {
   const read = (key: string) => typeof env[key] === "string" ? env[key].trim() : "";
   const development = read("NODE_ENV") !== "production";
+  const generationFlag = read("EMAIL_GENERATION_ENABLED") || "true";
+  if (generationFlag !== "true" && generationFlag !== "false") throw new Error("EMAIL_GENERATION_ENABLED must be true or false");
+  const demoFlag = read("DEMO_MODE") || "false";
+  if (demoFlag !== "true" && demoFlag !== "false") throw new Error("DEMO_MODE must be true or false");
+  if (demoFlag === "true") {
+    if (generationFlag !== "true") throw new Error("Demo mode requires EMAIL_GENERATION_ENABLED=true");
+    if (read("INGESTION_ENABLED") === "true") throw new Error("Demo mode cannot enable external email ingestion");
+    if (read("OWNED_MAIL_DOMAINS") || read("MAIL_DOMAINS")) throw new Error("Demo mode requires empty OWNED_MAIL_DOMAINS and MAIL_DOMAINS");
+    for (const category of inboxCategories) {
+      const configured = read(`${category.toUpperCase()}_EMAIL_DOMAIN`);
+      if (configured && configured !== demoDomains[category]) throw new Error("Demo mode only supports the fixed reserved inboxzero.test category domains");
+    }
+    const customFlag = read("CUSTOM_USERNAMES_ENABLED") || "true";
+    if (customFlag !== "true" && customFlag !== "false") throw new Error("CUSTOM_USERNAMES_ENABLED must be true or false");
+    return { domains: { ...demoDomains }, generationEnabled: true, demoMode: true, allowedDomains: Object.values(demoDomains), legacyDomains: [], customUsernamesEnabled: customFlag === "true", development };
+  }
+  if (generationFlag === "false") {
+    if (read("INGESTION_ENABLED") === "true") throw new Error("Ingestion must be disabled when email generation is disabled");
+    const domainKeys = ["OWNED_MAIL_DOMAINS", "MAIL_DOMAINS", ...inboxCategories.map(category => `${category.toUpperCase()}_EMAIL_DOMAIN`)];
+    if (domainKeys.some(key => read(key))) throw new Error("Clear mail domain settings when EMAIL_GENERATION_ENABLED=false; enable generation to validate configured domains");
+    return { domains: {}, generationEnabled: false, demoMode: false, allowedDomains: [], legacyDomains: [], customUsernamesEnabled: false, development };
+  }
   const owned = read("OWNED_MAIL_DOMAINS").split(",").filter(Boolean).map(normalizeDomain);
   const controlled = (domain: string) => owned.some(root => domain === root || domain.endsWith(`.${root}`));
   if (!development && owned.length === 0) throw new Error("OWNED_MAIL_DOMAINS must declare domains controlled by InboxZero in production");
@@ -78,7 +105,7 @@ export function resolveDomainConfiguration(env: Record<string, unknown>): Domain
   const approvedLegacy = legacy.filter(domain => controlled(domain) || (development && isReservedDomain(domain)));
   const flag = read("CUSTOM_USERNAMES_ENABLED") || "true";
   if (flag !== "true" && flag !== "false") throw new Error("CUSTOM_USERNAMES_ENABLED must be true or false");
-  return { domains, allowedDomains: [...new Set([...Object.values(domains), ...approvedLegacy])], legacyDomains: approvedLegacy, customUsernamesEnabled: flag === "true", development };
+  return { domains, generationEnabled: true, demoMode: false, allowedDomains: [...new Set([...Object.values(domains), ...approvedLegacy])], legacyDomains: approvedLegacy, customUsernamesEnabled: flag === "true", development };
 }
 
 export interface AddressCandidate {
@@ -90,7 +117,10 @@ export interface AddressCandidate {
 }
 
 export function addressDomain(input: z.infer<typeof createInboxSchema>, configuration: DomainConfiguration): string {
-  if (!input.domain) return configuration.domains[input.category];
+  if (!configuration.generationEnabled) throw Errors.emailGenerationDisabled();
+  const categoryDomain = configuration.domains[input.category];
+  if (!categoryDomain) throw Errors.emailGenerationDisabled();
+  if (!input.domain) return categoryDomain;
   if (!configuration.allowedDomains.includes(input.domain)) throw Errors.badRequest("Domain is not available");
   if (input.domain !== configuration.domains[input.category] &&
       !(input.category === "personal" && configuration.legacyDomains.includes(input.domain) && ![configuration.domains.work, configuration.domains.school].includes(input.domain))) {
@@ -107,6 +137,7 @@ export async function allocateAddress<T>(
   insert: (candidate: AddressCandidate) => Promise<T | undefined>,
   random: () => string = () => randomBytes(12).toString("hex"),
 ): Promise<T> {
+  if (!configuration.generationEnabled) throw Errors.emailGenerationDisabled();
   if (input.username && !configuration.customUsernamesEnabled) throw Errors.badRequest("Custom usernames are disabled");
   const domain = addressDomain(input, configuration);
   for (let attempt = 0; attempt < 5; attempt++) {

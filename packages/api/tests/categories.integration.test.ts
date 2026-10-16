@@ -33,7 +33,7 @@ describe.skipIf(!testUrl)("category API with isolated PostgreSQL", () => {
     } finally { await setup.end(); }
 
     Object.assign(process.env, {
-      DATABASE_URL: testUrl, NODE_ENV: "test", MAIL_DOMAINS: "legacy.inboxzero.test",
+      DATABASE_URL: testUrl, NODE_ENV: "test", DEMO_MODE: "false", EMAIL_GENERATION_ENABLED: "true", MAIL_DOMAINS: "legacy.inboxzero.test",
       OWNED_MAIL_DOMAINS: "", WORK_EMAIL_DOMAIN: "work.inboxzero.test",
       SCHOOL_EMAIL_DOMAIN: "school.inboxzero.test", PERSONAL_EMAIL_DOMAIN: "inboxzero.test",
       CUSTOM_USERNAMES_ENABLED: "true", ACCESS_TOKEN_SECRET: "a".repeat(64), INGESTION_API_SECRET: "b".repeat(64),
@@ -68,7 +68,7 @@ describe.skipIf(!testUrl)("category API with isolated PostgreSQL", () => {
     const result = await app.inject({ url: "/api/inboxes/options" });
     expect(result.statusCode).toBe(200);
     expect(result.json().categories.map((value: { category: string }) => value.category)).toEqual(["work", "school", "personal"]);
-    expect(Object.keys(result.json()).sort()).toEqual(["categories", "customUsernamesEnabled", "development"]);
+    expect(Object.keys(result.json()).sort()).toEqual(["categories", "customUsernamesEnabled", "deliveryNotice", "demoMode", "development", "emailGenerationEnabled", "simulationEnabled"]);
   });
 
   it.each(["work", "school", "personal"])("persists %s and returns category metadata on create and read", async category => {

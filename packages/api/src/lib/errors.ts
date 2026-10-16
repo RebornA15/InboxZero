@@ -10,6 +10,8 @@ export class AppError extends Error {
 }
 
 export const Errors = {
+  emailGenerationDisabled: () =>
+    new AppError(503, "Email address generation is disabled until an owned mail domain is configured", "EMAIL_GENERATION_DISABLED"),
   notFound: (resource = "Resource") =>
     new AppError(404, `${resource} not found`, "NOT_FOUND"),
 

@@ -105,11 +105,11 @@ export function CreateAddressDialog({ open, initialCategory, hasActiveInbox, onC
         </div>}
         {domain && <div className="address-preview"><span>Address preview</span><code>{username.trim().toLowerCase() || (category === "work" ? "contact.…" : category === "school" ? "student…" : "random…")}@{domain}</code></div>}
         {error && <div className="address-dialog-error" role="alert"><p>{error}</p>{!options && <button className="btn" type="button" onClick={() => setRetry(value => value + 1)}><ArrowClockwise size={16} />Retry</button>}</div>}
-        <p className="dialog-delivery-note">{options?.development ? "Test domains are local-only. Owned domains require inbound routing." : "External email requires configured DNS and inbound routing."}</p>
+        <p className="dialog-delivery-note">{options?.demoMode ? "DEMO ONLY — all addresses use reserved .test domains and cannot send or receive real email. Do not use for signups or verification." : options?.development ? "Test domains are local-only. Owned domains require inbound routing." : "External email requires configured DNS and inbound routing."}</p>
         {hasActiveInbox && <p className="dialog-description">Creating an address replaces this session’s active inbox.</p>}
         <div className="address-dialog-footer">
           <button type="button" className="btn" onClick={close} disabled={pending}>Cancel</button>
-          <button type="submit" className="btn btn-primary" disabled={!options || pending}><Plus size={18} />{pending ? "Creating address…" : "Create address"}</button>
+          <button type="submit" className="btn btn-primary" disabled={!options || !options.categories.length || pending}><Plus size={18} />{pending ? "Creating address…" : options?.demoMode ? "Create demo address" : "Create address"}</button>
         </div>
       </form>
     </dialog>

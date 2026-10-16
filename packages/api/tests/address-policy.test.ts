@@ -44,6 +44,14 @@ describe("domain configuration", () => {
 });
 
 describe("atomic address allocation", () => {
+  it("never generates an address or writes to storage in limited mode, including explicit legacy domains", async () => {
+    const limited = resolveDomainConfiguration({ NODE_ENV: "production", EMAIL_GENERATION_ENABLED: "false" });
+    const insert = vi.fn();
+    for (const request of [{}, { category: "work" }, { category: "school", username: "guest" }, { domain: "inboxzero.test" }]) {
+      await expect(allocateAddress(createInboxSchema.parse(request), limited, insert)).rejects.toMatchObject({ statusCode: 503, code: "EMAIL_GENERATION_DISABLED" });
+    }
+    expect(insert).not.toHaveBeenCalled();
+  });
   it.each(["work", "school", "personal"] as const)("generates a secure %s address with category metadata", async category => {
     const candidate = await allocateAddress(createInboxSchema.parse({ category }), local, async value => value);
     expect(candidate.category).toBe(category);
