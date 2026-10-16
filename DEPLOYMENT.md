@@ -17,7 +17,7 @@ Free hosting is limited: Render's free API sleeps after 15 minutes without inbou
 
 - pnpm 12.10.1 workspace: `@inboxzero/web`, `@inboxzero/api`, optional host-only `@inboxzero/local-db`. Neither app imports another workspace package. Vercel restricts workspace discovery to packages/web. Default workspace discovery includes only application packages; the host-only local database helper is explicitly excluded and installed only on request. Both apps require root workspace/TypeScript files.
 - Web `build`: `tsc && vite build`, output `packages/web/dist`. There is no frontend `test` script. Frontend API/SSE tests use the API's existing Vitest command.
-- API `build` compiles TypeScript and copies SQL/journal assets to `dist/db/migrations`. `start` runs `node dist/check-config.js && node dist/index.js`; `config:check` validates runtime configuration without database access; `db:migrate:production` runs `node dist/db/migrate.js`. Development migration scripts still load root `.env` with tsx. Production needs neither tsx nor a repository `.env`.
+- API `build` compiles TypeScript and copies SQL/journal assets to `dist/db/migrations`. `start` runs `node dist/check-config.js && node dist/db/migrate.js && node dist/index.js`; `config:check` validates runtime configuration without database access; `db:migrate:production` runs `node dist/db/migrate.js`. Development migration scripts still load root `.env` with tsx. Production needs neither tsx nor a repository `.env`.
 - HTTP and streaming fetch SSE share `VITE_API_BASE_URL`. Native EventSource is not used: inbox authentication requires `X-Access-Secret`. Empty/unset base uses `/api` and the existing Vite proxy (`API_PROXY_TARGET`, default `http://127.0.0.1:3001`). Docker retains its `http://api:3001` proxy. Vite's proxy does not run in the deployed static frontend.
 - Production Fastify binds to `0.0.0.0` and reads platform `    PORT`. Docker/Compose, migration SQL, address rules, categories, and responsive styles are unchanged.
 
@@ -65,9 +65,11 @@ Ensure Vercel uses the committed `packages/web/vercel.json` commands rather than
 | Instances | `1` |
 | Build Command | `npx --yes pnpm@12.10.1 install --frozen-lockfile --prod=false --workspace-packages=packages/api --filter @inboxzero/api... && npx --yes pnpm@12.10.1 --workspace-packages=packages/api --filter @inboxzero/api build` |
 | Pre-Deploy Command | Empty (not supported on Free web services) |
-| Start Command | `node packages/api/dist/check-config.js && node packages/api/dist/index.js` |
+| Start Command | `node packages/api/dist/check-config.js && node packages/api/dist/db/migrate.js && node packages/api/dist/index.js` |
 | Health Check Path | `/api/health` |
 | Auto-deploy | Off |
+
+The Free-plan Start Command explicitly runs configuration validation, then the compiled checked-in Drizzle migrator, then the API using shell `&&`. A nonzero migration exit prevents the API process from starting. No Pre-Deploy Command, tsx, drizzle-kit, or development dependency is needed at runtime; `pg` and `drizzle-orm` are production dependencies. Keep `DATABASE_URL` only in Render environment settings, never in the command. The API entry point also retains its migration/schema gate as protection against dashboard overrides. This second journal check is safe and does not replay applied migrations. Updating render.yaml alone does not update a separately configured service: paste this Start Command into the existing Render dashboard, leave Pre-Deploy empty, and manually deploy your approved revision. No build-time production database connection is required.
 
 ### Recurring owned-domain startup error despite DEMO_MODE=true
 
