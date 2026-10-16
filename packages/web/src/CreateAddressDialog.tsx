@@ -83,6 +83,7 @@ export function CreateAddressDialog({ open, initialCategory, hasActiveInbox, onC
           <div><p className="dialog-eyebrow">A fresh start</p><h2 id="address-dialog-title" className="display-heading">Choose your address style</h2></div>
           <button type="button" className="btn btn-icon" aria-label="Close address selection" title="Close" disabled={pending} onClick={close}><X size={18} /></button>
         </div>
+        <div className="address-dialog-body">
         <p id="address-style-note" className="dialog-description">Work and School describe address styles, not verified work or school identities. No personal details needed.</p>
         <fieldset className="address-category-options" disabled={!options || pending}>
           <legend className="visually-hidden">Email address category</legend>
@@ -107,6 +108,7 @@ export function CreateAddressDialog({ open, initialCategory, hasActiveInbox, onC
         {error && <div className="address-dialog-error" role="alert"><p>{error}</p>{!options && <button className="btn" type="button" onClick={() => setRetry(value => value + 1)}><ArrowClockwise size={16} />Retry</button>}</div>}
         <p className="dialog-delivery-note">{options?.demoMode ? "DEMO ONLY — all addresses use reserved .test domains and cannot send or receive real email. Do not use for signups or verification." : options?.development ? "Test domains are local-only. Owned domains require inbound routing." : "External email requires configured DNS and inbound routing."}</p>
         {hasActiveInbox && <p className="dialog-description">Creating an address replaces this session’s active inbox.</p>}
+        </div>
         <div className="address-dialog-footer">
           <button type="button" className="btn" onClick={close} disabled={pending}>Cancel</button>
           <button type="submit" className="btn btn-primary" disabled={!options || !options.categories.length || pending}><Plus size={18} />{pending ? "Creating address…" : options?.demoMode ? "Create demo address" : "Create address"}</button>

@@ -555,7 +555,7 @@ export function App() {
         <div className="mail-content">
           <section className="message-list-pane" aria-label="Messages">
             <div className="list-heading" aria-hidden="true">
-              <span>Sender</span><span>Message</span><span>Received</span>
+              <span>Sender</span><span>All messages</span><span>Received</span>
             </div>
             {filteredMessages.length === 0 ? (
               <div className="empty-state">

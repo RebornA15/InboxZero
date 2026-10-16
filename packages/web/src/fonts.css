@@ -4,7 +4,7 @@
   font-family: "Geist Sans";
   font-style: normal;
   font-weight: 100 900;
-  font-display: optional;
+  font-display: swap;
   src: url("@fontsource-variable/geist/files/geist-latin-wght-normal.woff2") format("woff2");
 }
 
@@ -12,6 +12,6 @@
   font-family: "Geist Mono";
   font-style: normal;
   font-weight: 100 900;
-  font-display: optional;
+  font-display: swap;
   src: url("@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2") format("woff2");
 }
