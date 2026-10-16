@@ -7,7 +7,7 @@ services:
     region: frankfurt
     numInstances: 1
     autoDeployTrigger: "off"
-    buildCommand: npx --yes pnpm@12.10.1 install --frozen-lockfile --prod=false --filter @inboxzero/api... && npx --yes pnpm@12.10.1 --filter @inboxzero/api build
+    buildCommand: npx --yes pnpm@12.10.1 install --frozen-lockfile --prod=false --workspace-packages=packages/api --filter @inboxzero/api... && npx --yes pnpm@12.10.1 --workspace-packages=packages/api --filter @inboxzero/api build
     preDeployCommand: node packages/api/dist/db/migrate.js
     startCommand: node packages/api/dist/index.js
     healthCheckPath: /api/health

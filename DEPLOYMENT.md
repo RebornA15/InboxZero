@@ -52,11 +52,21 @@ Ensure Vercel uses the committed `packages/web/vercel.json` commands rather than
 | Runtime | Node |
 | Root Directory | Blank: repository root |
 | Instances | `1` |
-| Build Command | `npx --yes pnpm@12.10.1 install --frozen-lockfile --prod=false --filter @inboxzero/api... && npx --yes pnpm@12.10.1 --filter @inboxzero/api build` |
+| Build Command | `npx --yes pnpm@12.10.1 install --frozen-lockfile --prod=false --workspace-packages=packages/api --filter @inboxzero/api... && npx --yes pnpm@12.10.1 --workspace-packages=packages/api --filter @inboxzero/api build` |
 | Pre-Deploy Command | `node packages/api/dist/db/migrate.js` |
 | Start Command | `node packages/api/dist/index.js` |
 | Health Check Path | `/api/health` |
 | Auto-deploy | Off |
+
+### Render embedded PostgreSQL install failure
+
+The Render commands restrict workspace discovery to `packages/api` during both install and build, matching the existing Vercel fix. `--filter @inboxzero/api...` alone does not constrain the workspace discovered by pnpm 12's automatic dependency verification before scripts; that verification can reinstall the full workspace, including `@inboxzero/local-db` -> `embedded-postgres` -> `@embedded-postgres/linux-x64@18.4.0-beta.17`. The API has no dependency on the local helper. Its runtime and compiled migrations use `pg` with `DATABASE_URL` for Render PostgreSQL.
+
+Keep `--prod=false` during the build: TypeScript and declaration packages are development dependencies required to compile the API. This also retains API development/test tools, but excludes the unrelated local database helper and frontend workspace. No manifest, lockfile, global workspace discovery, or build approval changes are needed. The existing Windows-only embedded binary approval and esbuild approval remain intact; no Linux PostgreSQL script is approved and script protection stays enabled. Vercel, Docker, and local database commands keep their existing configuration.
+
+Use the commands above in Render's dashboard if it overrides the Blueprint, with Root Directory blank. Clear the build cache for the first redeploy to discard an older full-workspace installation. The compiled migration remains a separate pre-deploy step.
+
+Verified in an isolated Linux x64 checkout under WSL with Node 24.11.1, pnpm 12.10.1, NODE_ENV=production, and a fresh install store: frozen install and production API build passed. Embedded PostgreSQL was absent before and after build; neither local-db nor web workspace dependencies were linked. Compiled migration assets matched their source, and the lockfile and build approvals were unchanged. Existing API tests: 59 passed, 19 database integration tests skipped (no isolated test database configured). Live Render deployment and production database migrations were not run.
 
 Replace angle-bracket placeholders with real values; no production hostname or domain ownership is inferred.
 
