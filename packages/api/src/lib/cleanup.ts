@@ -3,41 +3,10 @@ import { db } from "../db/index.js";
 import { inboxes, messages } from "../db/schema.js";
 import { sseManager } from "./sse.js";
 import { config } from "../config.js";
+import { logDatabaseError } from "../db/errors.js";
 
 let cleanupTimer: NodeJS.Timeout | null = null;
-
-function serializeCleanupError(err: unknown) {
-  if (!(err instanceof Error)) return err;
-
-  const pgError = err as Error & {
-    code?: string;
-    severity?: string;
-    detail?: string;
-    hint?: string;
-    position?: string;
-    schema?: string;
-    table?: string;
-    column?: string;
-    constraint?: string;
-    routine?: string;
-  };
-
-  if (config.NODE_ENV === "production") return { name: pgError.name, code: pgError.code };
-  return {
-    message: pgError.message,
-    code: pgError.code,
-    severity: pgError.severity,
-    detail: pgError.detail,
-    hint: pgError.hint,
-    position: pgError.position,
-    schema: pgError.schema,
-    table: pgError.table,
-    column: pgError.column,
-    constraint: pgError.constraint,
-    routine: pgError.routine,
-    stack: pgError.stack,
-  };
-}
+let cleanupInFlight = false;
 
 export async function runCleanup(): Promise<{
   expiredInboxes: number;
@@ -86,11 +55,7 @@ export async function runCleanup(): Promise<{
 
       console.log(`[cleanup] Expired inbox ${inbox.publicId}, deleted ${deleted.length} messages`);
     } catch (err) {
-      // Log operational outcome without revealing message content
-      console.error(
-        `[cleanup] Failed to expire inbox ${inbox.publicId}:`,
-        serializeCleanupError(err)
-      );
+      logDatabaseError("cleanup", err);
     }
   }
 
@@ -98,17 +63,22 @@ export async function runCleanup(): Promise<{
 }
 
 export function startCleanupWorker(): void {
+  if (cleanupTimer) return;
   const interval = config.CLEANUP_INTERVAL_MS;
   console.log(`[cleanup] Worker started, interval: ${interval}ms`);
 
   cleanupTimer = setInterval(async () => {
+    if (cleanupInFlight) return;
+    cleanupInFlight = true;
     try {
       const result = await runCleanup();
       if (result.expiredInboxes > 0) {
         console.log(`[cleanup] Expired ${result.expiredInboxes} inboxes, deleted ${result.deletedMessages} messages`);
       }
     } catch (err) {
-      console.error("[cleanup] Worker error:", serializeCleanupError(err));
+      logDatabaseError("cleanup", err);
+    } finally {
+      cleanupInFlight = false;
     }
   }, interval);
 

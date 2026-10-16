@@ -17,7 +17,7 @@ Free hosting is limited: Render's free API sleeps after 15 minutes without inbou
 
 - pnpm 12.10.1 workspace: `@inboxzero/web`, `@inboxzero/api`, optional host-only `@inboxzero/local-db`. Neither app imports another workspace package. Vercel restricts workspace discovery to packages/web. Default workspace discovery includes only application packages; the host-only local database helper is explicitly excluded and installed only on request. Both apps require root workspace/TypeScript files.
 - Web `build`: `tsc && vite build`, output `packages/web/dist`. There is no frontend `test` script. Frontend API/SSE tests use the API's existing Vitest command.
-- API `build` now compiles TypeScript and copies SQL/journal assets to `dist/db/migrations`. Added actual scripts: `start` runs `node dist/index.js`; `db:migrate:production` runs `node dist/db/migrate.js`. Development migration scripts still load root `.env` with tsx. Production needs neither tsx nor a repository `.env`.
+- API `build` compiles TypeScript and copies SQL/journal assets to `dist/db/migrations`. `start` runs `node dist/check-config.js && node dist/index.js`; `config:check` validates runtime configuration without database access; `db:migrate:production` runs `node dist/db/migrate.js`. Development migration scripts still load root `.env` with tsx. Production needs neither tsx nor a repository `.env`.
 - HTTP and streaming fetch SSE share `VITE_API_BASE_URL`. Native EventSource is not used: inbox authentication requires `X-Access-Secret`. Empty/unset base uses `/api` and the existing Vite proxy (`API_PROXY_TARGET`, default `http://127.0.0.1:3001`). Docker retains its `http://api:3001` proxy. Vite's proxy does not run in the deployed static frontend.
 - Production Fastify binds to `0.0.0.0` and reads platform `    PORT`. Docker/Compose, migration SQL, address rules, categories, and responsive styles are unchanged.
 
@@ -56,7 +56,7 @@ Ensure Vercel uses the committed `packages/web/vercel.json` commands rather than
 
 ## Render settings
 
-`render.yaml` is an unexecuted Blueprint template: one Free Node API instance and Free PostgreSQL 16 in Frankfurt (1 GB, 30-day database lifetime). Database external access is disabled. Review account availability and quotas before applying. Auto-deploy is off, but applying a Blueprint can still create resources and trigger initial deployment. Existing manually configured services must update their dashboard settings explicitly.
+`render.yaml` is an unexecuted Blueprint template: one Free Node API instance and Free PostgreSQL 16 in Virginia (1 GB, 30-day database lifetime). Database external access is disabled. Review account availability and quotas before applying. Auto-deploy is off, but applying a Blueprint can still create resources and trigger initial deployment. Existing manually configured services must update their dashboard settings explicitly.
 
 | API service setting | Exact value |
 | --- | --- |
@@ -65,9 +65,23 @@ Ensure Vercel uses the committed `packages/web/vercel.json` commands rather than
 | Instances | `1` |
 | Build Command | `npx --yes pnpm@12.10.1 install --frozen-lockfile --prod=false --workspace-packages=packages/api --filter @inboxzero/api... && npx --yes pnpm@12.10.1 --workspace-packages=packages/api --filter @inboxzero/api build` |
 | Pre-Deploy Command | Empty (not supported on Free web services) |
-| Start Command | `node packages/api/dist/db/migrate.js && node packages/api/dist/index.js` |
+| Start Command | `node packages/api/dist/check-config.js && node packages/api/dist/db/migrate.js && node packages/api/dist/index.js` |
 | Health Check Path | `/api/health` |
 | Auto-deploy | Off |
+
+### Recurring owned-domain startup error despite DEMO_MODE=true
+
+Commit `c5dd57c` already implements production demo mode. The raw environment schema accepts only literal strings `true` and `false`, defaults DEMO_MODE to false, and passes the string to domain resolution before transforming it to a boolean. With `NODE_ENV=production` and the exact `DEMO_MODE=true` value, domain resolution returns the fixed demo configuration before the live owned-domain check. The reported `OWNED_MAIL_DOMAINS must declare...` message can be reproduced with DEMO_MODE absent/false, but not with a valid true value on that code. Quoted, uppercase, whitespace-padded, or numeric flag values fail enum validation instead. Production reads the running process environment; it does not load the repository `.env`.
+
+Without access to the live Render service, the precise remote mismatch cannot be confirmed. Check the deployed commit/branch and runtime service environment rather than adding fake domains. Verify the variable is on the **API Web Service**, not the database, frontend, preview service, or only a build-command shell prefix. Save the environment and redeploy the intended commit; a successful older build does not prove that the new runtime used the same configuration. Update dashboard start/build overrides to match this file and the table above. Clear the build cache once if stale compiled output is suspected.
+
+The start command now runs a configuration preflight **before migrations**. It prints `inboxzero-config-preflight-v1` with the flag state (`true`, `false`, `unset`, or `invalid`) and the Render-provided `RENDER_GIT_COMMIT` when available, never credentials or the environment. Render documents that revision variable in [default environment variables](https://render.com/docs/environment-variables). Successful demo startup must then print `inboxzero-config-valid` with `nodeEnv=production`, `mode=demo-only`, and `externalIngestion=false`. Missing preflight logs indicate the new start command was not run. A missing compiled check-config file indicates the selected build lacks this change. The preflight also checks PostgreSQL protocol, TLS policy, and optional CA file readability without opening a connection; actual database connectivity is checked by migrations and health readiness.
+
+For the Render dashboard, enter key `DEMO_MODE`, value `true` (no quotes or surrounding spaces). Keep `EMAIL_GENERATION_ENABLED=true` (or unset; true is the default) and `INGESTION_ENABLED=false` (or unset; demo forces it off). Leave OWNED_MAIL_DOMAINS and MAIL_DOMAINS empty/unset; category variables must be empty or their exact fixed demo values. Additional required values remain DATABASE_URL, ACCESS_TOKEN_SECRET, INGESTION_API_SECRET (independent, at least 32 characters each), and CORS_ORIGIN (an exact frontend HTTPS origin). Set PGSSLMODE=disable (or leave it unset) for Render's trusted internal database URL, or use verified TLS for an external database. Leave PORT to Render; preserve Node 24 and the appropriate TRUST_PROXY setting.
+
+After building, run `node packages/api/dist/check-config.js` in the actual runtime environment for a configuration-only diagnostic. Do not paste environment dumps or connection strings into logs/issues. Live-email production (`DEMO_MODE=false`, generation enabled) continues requiring real owned roots and all category domains; demo `.test` addresses never become deliverable by changing the flag.
+
+Recurring-startup verification: frozen API install and production build passed with pnpm 12.10.1; the regular suite passed 99 tests (24 database integration tests skipped without dedicated database variables). Five demo database integration tests passed separately. The compiled preflight, migrations (twice), and actual production API startup passed with an isolated TLS PostgreSQL instance: demo-only mode, health 200, all three reserved categories, ingestion 404 even with the correct secret. Tests reproduce the reported owned-domain error for missing/false DEMO_MODE and verify that true avoids that branch, while invalid flag syntax, conflicting flags/domains, missing secrets, invalid CORS, and disabled production TLS still fail. Logging tests check that URL/password/secret fixtures never appear in preflight output. These are local reproductions, not verification of the live Render deployment or its environment.
 
 ### Render embedded PostgreSQL install failure
 
@@ -99,7 +113,7 @@ Replace angle-bracket placeholders with real values; no production hostname or d
 | `HOST` | `0.0.0.0` |
 | `PORT` | Leave unset; Render supplies it |
 | `DATABASE_URL` | Private Render database connection URL; Blueprint uses `fromDatabase.connectionString` |
-| `PGSSLMODE` | `require` for Render internal URL only; see TLS below |
+| `PGSSLMODE` | `disable` or unset for the trusted Render internal URL; `verify-full` for external URLs |
 | `CORS_ORIGIN` | Exact frontend origin, e.g. `https://<actual-project>.vercel.app`, no trailing slash/path |
 | `TRUST_PROXY` | `1`; verify actual proxy chain in staging |
 | `ACCESS_TOKEN_SECRET` | Unique random value, minimum 32 characters; Blueprint generates it |
@@ -148,11 +162,58 @@ CORS requires exact comma-separated HTTPS origins. List the custom frontend orig
 
 ## TLS and migrations
 
-The API and compiled runner share `src/db/connection.ts`. TLS mode precedence: URL `sslmode`, then standard `PGSSLMODE`, then `verify-full` in production or `disable` locally. Production rejects disabled TLS and ambiguous `ssl=` overrides.
+### Render internal PostgreSQL: self-signed certificate errors
 
-- Render internal Postgres uses self-signed certificates. Explicit `require` encrypts with TLS 1.2+ without plaintext fallback, but does not verify the certificate. Limit this exception to Render's private network in the same account/region.
+`DEPTH_ZERO_SELF_SIGNED_CERT` means the TLS connection reached a server but certificate verification rejected its self-signed leaf. It is not fixed by putting both resources in the same region alone. Render's internal PostgreSQL endpoint uses self-signed TLS certificates; see [Render internal TLS modes](https://render.com/docs/postgresql-creating-connecting#ssl-modes-for-internal-connections). Previously the production default was `verify-full` for every hostname. A missing PGSSLMODE or URL `sslmode=verify-full` overriding PGSSLMODE=require could select that incompatible verification policy. The exact live environment cannot be confirmed from this workspace.
+
+The cleanup worker only queries PostgreSQL through the shared Drizzle/pg pool; it does not make outbound HTTPS requests. This error therefore comes from the PostgreSQL driver's Node TLS handshake, not website HTTPS. The failing settings are a requested TLS connection with rejectUnauthorized=true against the private endpoint's self-signed certificate. Earlier require/rejectUnauthorized=false settings requested TLS but would not themselves produce this verification error; a repeated error under that reported policy indicates a different deployed build, effective configuration, or connection path. The current fix removes the internal handshake by default instead of globally weakening certificate verification.
+
+Dashboard changes for the API and database already deployed in **Virginia**:
+
+1. On the PostgreSQL database, open **Connect → Internal** and copy the complete Internal Database URL into the **API Web Service's** `DATABASE_URL`. Both resources must also be in the same Render account/private network. Use the internal short `dpg-...` hostname, not a public `...virginia-postgres.render.com` hostname or an IP address. Do not paste the URL into logs or issues. The Blueprint's `fromDatabase.connectionString` binding supplies this internal URL.
+2. On the API service remove the old `PGSSLMODE=require`/`verify-full` value, or set `PGSSLMODE=disable`. Prefer the original internal URL with no manually added TLS query parameters. Remove manually added `sslmode` parameters (including require and verify-full) and any `ssl`, `sslcert`, `sslkey`, `sslrootcert`, or `uselibpqcompat` parameters. Never use `NODE_TLS_REJECT_UNAUTHORIZED=0`, and never disable TLS for an external production database.
+3. Keep `NODE_ENV=production` and the existing demo flags/secrets/CORS. No new environment variable is required: Render supplies `RENDER=true` automatically. The narrowly scoped internal-host default is an additional safeguard if PGSSLMODE is absent, not a reason to use the internal exception on a public URL.
+4. Save and redeploy the intended code using the preflight/migration/start command above. Preflight should report database `endpoint=render-internal`, `sslMode=disable`, `encrypted=false`, `certificateVerification=false`. This explicit non-TLS policy belongs only to this PostgreSQL connection on Render's trusted private network; other HTTPS/TLS clients are unaffected. Migrations must complete, `/api/health` must return 200 with database `ok`, and cleanup must stop logging certificate errors. The configuration preflight does not itself test database connectivity.
+
+For an **external/public PostgreSQL URL**, set `PGSSLMODE=verify-full` and remove any conflicting URL `sslmode=require`. Use the full provider hostname and a trusted certificate chain. A custom CA can be supplied through URL `sslrootcert=/absolute/path/to/ca.pem` with verify-full; do not disable verification to work around an external CA or hostname error. No host-based verification exception is inferred for public Render hosts, lookalike domains, IP addresses, or non-Render environments.
+
+External production connections now reject unverified `require` explicitly, rather than allowing a manually supplied PGSSLMODE to turn verification off on a public endpoint. The default for a trusted private short dpg-* hostname on Render is now ssl=false, so no TLS handshake is requested. This corrects the earlier application policy that unnecessarily forced TLS internally. Explicit require is still available for optional internal self-signed TLS; it does not fall back to plaintext. Plaintext production connections are rejected everywhere except the recognized Render-private endpoint classification. Loopback fixtures may explicitly use require for TLS tests.
+
+### Diagnosing degraded database health
+
+Listening on port 10000 confirms the HTTP server started, not database readiness. `/api/health` acquires a client and executes `SELECT 1` with a 5-second query timeout; connection acquisition also has the shared 5-second connection timeout. It returns 200 only after the query succeeds and 503 otherwise. Query failures discard the client instead of returning a potentially broken connection to the pool. The response remains generic and never returns diagnostic details to public callers.
+
+Health, cleanup, idle-pool errors, and failed migrations now write a server-only JSON entry with `event=database-error`, an operation, an allowlisted underlying error code, a static reason/action, and the effective TLS policy. Raw error messages, stack traces, URLs, hostnames, credentials, SQL details, and arbitrary error objects are never logged by this database logger. Nested driver causes and AggregateErrors are inspected safely; unknown failures receive UNKNOWN_DATABASE_ERROR without raw values. Example codes and actions:
+
+| Code | Meaning / action |
+| --- | --- |
+| DEPTH_ZERO_SELF_SIGNED_CERT | A self-signed certificate was rejected; verify internal URL and effective connection policy |
+| ENOTFOUND / EAI_AGAIN | DNS failure; check the internal hostname and same-account/region access |
+| ECONNREFUSED / ETIMEDOUT | Database endpoint unavailable or inaccessible |
+| 28P01 | Authentication failed; refresh the API's database URL after credential rotation |
+| 3D000 | Database name does not exist |
+| 53300 / 57P03 | Database connection limit reached or database is not ready |
+| 42P01 / 42703 | Cleanup/application queries need the correct migrations; SELECT 1 alone does not validate schema |
+
+An earlier certificate error does not prove the latest generic health failure has the same cause. After redeploy, inspect the new code/reason/TLS fields without sharing secrets. A require policy with certificateVerification=false should not produce a certificate-verification failure through this helper; if it does, verify the deployed commit/start command and check whether the error came from another process. The shared preflight and migration startup chain should reject configuration or database connection failures before the new API starts; an older dashboard override that runs only dist/index.js bypasses that sequence.
+
+Cleanup catches and logs database failures, retries on its next configured interval, and skips a tick while a previous cleanup remains active. Starting the worker twice does not create duplicate timers, and stopping it prevents further scheduled jobs. In-flight work may finish normally. No background connection failure is allowed to become an unhandled timer rejection.
+
+Readiness/logging regression tests verify SELECT 1 execution, bounded health query configuration, generic public 503 responses, failed-client disposal, recovery on later requests, nested error classification, and absence of secret/URL fixtures in server logs. Worker tests verify retry after failure, duplicate-start protection, stop behavior, and non-overlapping jobs. The 126 regular tests and 8 separate isolated database tests passed; 19 legacy database tests remain optional/skipped in the regular run. No frontend code was changed and no live Render deployment was accessed.
+
+Runtime Drizzle queries, seed, cleanup, and health share the API pool from `src/db/index.ts`. The compiled migration client uses the same `databaseConnection()` helper. Drizzle Kit now obtains explicit credentials and the exact same TLS object from that helper instead of passing a raw URL through a separate parser. SSL URL parameters are removed before node-postgres parses its connection string, preventing the driver from replacing the explicit TLS object ([node-postgres SSL configuration](https://node-postgres.com/features/ssl)). Conflicting URL/environment modes and repeated sslmode parameters fail early.
+
+TLS verification: production API build passed; regular API suite: 126 passed, 27 optional database tests skipped. Five demo integration tests and three TLS transport tests passed separately against isolated local TLS PostgreSQL. The tests reproduced `DEPTH_ZERO_SELF_SIGNED_CERT` with the verified default, confirmed `pg_stat_ssl.ssl=true` for both client and pool under require, and verified successful strict TLS with a supplied trusted CA. Actual compiled preflight, repeated migrations, API readiness, demo routes, and the cleanup query succeeded. The installed Drizzle Kit `check --config drizzle.config.ts` command also passed. No live Render URL, credentials, production records, or dashboard settings were accessed/changed.
+
+TLS transport test variables are local-only: `INBOX_TLS_DATABASE_URL` must select a loopback self-signed disposable `inboxzero_demo_tests_<hex>` database; `INBOX_TLS_TEST_CA` supplies its CA certificate path for verified-TLS testing. Run `pnpm --workspace-packages=packages/api --filter @inboxzero/api test tests/database-tls.integration.test.ts --maxWorkers=1 --minWorkers=1` against that fixture. They are not Render deployment variables.
+
+Latest trusted-internal validation: API build passed; 127 regular tests passed (28 optional database tests skipped). Five demo and four transport database tests passed separately. A test-only DNS preload mapped a private dpg-* fixture hostname to isolated local PostgreSQL: the compiled production preflight reported render-internal/disable, repeated migrations completed, and the running API returned health 200 without PGSSLMODE being set. Transport tests confirmed pg_stat_ssl.ssl=false for both pg.Client and pg.Pool using the internal policy, while explicit TLS and verified TLS with a trusted CA still work. Drizzle Kit's actual config/check command passed with ssl=false. No system DNS/hosts, user database, live Render environment, or frontend files were modified.
+
+The API and compiled runner share `src/db/connection.ts`. TLS mode is taken from URL `sslmode` or `PGSSLMODE`; when both are supplied they must agree. Without either, a private short `dpg-*` hostname on Render (`RENDER=true`) uses `disable` (ssl=false); other production endpoints use `verify-full`, and local development uses `disable`. Production rejects disabled TLS outside the trusted Render-private endpoint and rejects ambiguous `ssl=` overrides.
+
+- Render internal Postgres does not require TLS on its trusted private network. The application defaults to ssl=false only for a short dpg-* hostname when RENDER=true. Optional explicit require enables TLS 1.2+ without certificate verification or plaintext fallback. The API and database must share the account/region; never use this policy for an external connection.
 - External URLs should use `verify-full`, the default in production. Restrict the database external IP allowlist if external connections are needed. Never set `NODE_TLS_REJECT_UNAUTHORIZED=0`.
-- A URL's `sslmode=require` overrides `PGSSLMODE=verify-full`; remove it for verified TLS. URL `sslrootcert=/absolute/path/to/ca.pem` supports a custom CA with `verify-full`. Unsupported client-certificate options are rejected explicitly.
+- A conflicting URL `sslmode` and `PGSSLMODE` now fails configuration validation instead of silently overriding either setting. Remove URL TLS parameters and select the intended `PGSSLMODE`. URL `sslrootcert=/absolute/path/to/ca.pem` supports a custom CA with `verify-full`. Unsupported client-certificate options are rejected explicitly.
 - Pool maximum: 20 per process. Keep one instance: SSE fanout and rate limits are process-local. Horizontal scaling needs shared event/rate-limit infrastructure. Rolling deployments temporarily overlap processes; verify reconnect/reconciliation in staging.
 
 Migrations run after build at the start of each API instance, including free-tier wakeups, before listening. The runner serializes concurrent jobs with a PostgreSQL session advisory lock on the same connection used by Drizzle. Checked-in migrations/journal are applied, the lock released, and connection closed. Failure exits nonzero and prevents API startup. Repeat runs are no-ops for applied journal entries. Do not use seed, schema push, generation, reset, or volume removal in deployment. Paid deployments may move migration to a separate pre-deploy step and use the Node API command alone as start.

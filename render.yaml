@@ -4,12 +4,12 @@ services:
     name: inboxzero-api
     runtime: node
     plan: free
-    region: frankfurt
+    region: virginia
     numInstances: 1
     autoDeployTrigger: "off"
     buildCommand: npx --yes pnpm@12.10.1 install --frozen-lockfile --prod=false --workspace-packages=packages/api --filter @inboxzero/api... && npx --yes pnpm@12.10.1 --workspace-packages=packages/api --filter @inboxzero/api build
     # Free services have no pre-deploy step; migrations must succeed before listening.
-    startCommand: node packages/api/dist/db/migrate.js && node packages/api/dist/index.js
+    startCommand: node packages/api/dist/check-config.js && node packages/api/dist/db/migrate.js && node packages/api/dist/index.js
     healthCheckPath: /api/health
     envVars:
       - key: NODE_VERSION
@@ -25,7 +25,7 @@ services:
           name: inboxzero-db
           property: connectionString
       - key: PGSSLMODE
-        value: require
+        value: disable
       - key: ACCESS_TOKEN_SECRET
         generateValue: true
       - key: INGESTION_API_SECRET
@@ -54,7 +54,7 @@ services:
 databases:
   - name: inboxzero-db
     plan: free
-    region: frankfurt
+    region: virginia
     postgresMajorVersion: "16"
     databaseName: inboxzero
     user: inboxzero

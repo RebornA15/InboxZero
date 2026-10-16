@@ -35,6 +35,8 @@ describe.skipIf(!testUrl)("production demo with isolated PostgreSQL", () => {
   });
   it("starts healthy, labels demo capabilities, and preserves every category and expiration", async () => {
     expect((await request("GET", "/api/health")).statusCode).toBe(200);
+    const { runCleanup } = await import("../src/lib/cleanup.js");
+    expect(await runCleanup()).toEqual({ expiredInboxes: 0, deletedMessages: 0 });
     const options = (await request("GET", "/api/inboxes/options")).json();
     expect(options).toMatchObject({ demoMode: true, development: false, simulationEnabled: true });
     expect(options.deliveryNotice).toContain("DEMO ONLY");

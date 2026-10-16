@@ -16,7 +16,8 @@
     "db:seed": "tsx --env-file=../../.env src/db/seed.ts",
     "db:studio": "drizzle-kit studio",
     "clean": "rimraf dist",
-    "start": "node dist/index.js",
+    "start": "node dist/check-config.js && node dist/index.js",
+    "config:check": "node dist/check-config.js",
     "db:migrate:production": "node dist/db/migrate.js"
   },
   "dependencies": {

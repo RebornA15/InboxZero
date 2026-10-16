@@ -1,5 +1,8 @@
 import type { FastifyPluginAsync } from "fastify";
 import { pool } from "../db/index.js";
+import { logDatabaseError } from "../db/errors.js";
+
+const healthQuery = { text: "SELECT 1", query_timeout: 5000 };
 
 export const healthRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get("/", async (_request, reply) => {
@@ -7,11 +10,13 @@ export const healthRoutes: FastifyPluginAsync = async (fastify) => {
 
     try {
       const client = await pool.connect();
-      try { await client.query("SELECT 1"); }
-      finally { client.release(); }
+      let failed = false;
+      try { await client.query(healthQuery); }
+      catch (error) { failed = true; throw error; }
+      finally { client.release(failed); }
       dbOk = true;
-    } catch {
-      // DB connection failed — do not reveal details
+    } catch (error) {
+      logDatabaseError("health", error);
     }
 
     const status = dbOk ? "ok" : "degraded";
