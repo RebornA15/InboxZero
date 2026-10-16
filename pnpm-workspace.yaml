@@ -1,5 +1,7 @@
 packages:
   - 'packages/*'
+  # Optional host database helper is installed explicitly, never by deployment installs.
+  - '!packages/local-db'
 
 allowBuilds:
   '@embedded-postgres/windows-x64@18.4.0-beta.17': true
